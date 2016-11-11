@@ -34,7 +34,9 @@ import net.majorkernelpanic.streaming.video.VideoQuality;
 import net.majorkernelpanic.streaming.video.VideoStream;
 import android.content.Context;
 import android.hardware.Camera.CameraInfo;
+import android.media.projection.MediaProjection;
 import android.preference.PreferenceManager;
+import android.provider.MediaStore;
 
 /**
  * Call {@link #getInstance()} to get access to the SessionBuilder.
@@ -67,14 +69,15 @@ public class SessionBuilder {
 	private Context mContext;
 	private int mVideoEncoder = VIDEO_H263; 
 	private int mAudioEncoder = AUDIO_AMRNB;
-	private int mCamera = CameraInfo.CAMERA_FACING_BACK;
 	private int mTimeToLive = 64;
 	private int mOrientation = 0;
-	private boolean mFlash = false;
-	private SurfaceView mSurfaceView = null;
 	private String mOrigin = null;
 	private String mDestination = null;
 	private Session.Callback mCallback = null;
+	private MediaProjection mMediaProjection = null;
+	private int m_screenW;
+	private int m_screenH;
+	private int m_pxDensity;
 
 	// Removes the default public constructor
 	private SessionBuilder() {}
@@ -125,10 +128,10 @@ public class SessionBuilder {
 
 		switch (mVideoEncoder) {
 		case VIDEO_H263:
-			session.addVideoTrack(new H263Stream(mCamera));
+			session.addVideoTrack(new H263Stream());
 			break;
 		case VIDEO_H264:
-			H264Stream stream = new H264Stream(mCamera);
+			H264Stream stream = new H264Stream();
 			if (mContext!=null) 
 				stream.setPreferences(PreferenceManager.getDefaultSharedPreferences(mContext));
 			session.addVideoTrack(stream);
@@ -137,10 +140,9 @@ public class SessionBuilder {
 
 		if (session.getVideoTrack()!=null) {
 			VideoStream video = session.getVideoTrack();
-			video.setFlashState(mFlash);
 			video.setVideoQuality(mVideoQuality);
-			video.setSurfaceView(mSurfaceView);
-			video.setPreviewOrientation(mOrientation);
+			video.setMediaProjection(mMediaProjection);
+			video.setScreenConfiguration(m_screenW, m_screenH, m_pxDensity);
 			video.setDestinationPorts(5006);
 		}
 
@@ -199,26 +201,8 @@ public class SessionBuilder {
 		return this;
 	}
 
-	public SessionBuilder setFlashEnabled(boolean enabled) {
-		mFlash = enabled;
-		return this;
-	}
-
-	public SessionBuilder setCamera(int camera) {
-		mCamera = camera;
-		return this;
-	}
-
 	public SessionBuilder setTimeToLive(int ttl) {
 		mTimeToLive = ttl;
-		return this;
-	}
-
-	/** 
-	 * Sets the SurfaceView required to preview the video stream. 
-	 **/
-	public SessionBuilder setSurfaceView(SurfaceView surfaceView) {
-		mSurfaceView = surfaceView;
 		return this;
 	}
 	
@@ -233,6 +217,19 @@ public class SessionBuilder {
 	
 	public SessionBuilder setCallback(Session.Callback callback) {
 		mCallback = callback;
+		return this;
+	}
+
+	public SessionBuilder setMediaProjection(MediaProjection mediaProjection) {
+		mMediaProjection = mediaProjection;
+		return this;
+	}
+
+	public SessionBuilder setScreenConfiguration(int w, int h, int pxDensity) {
+		m_screenW = w;
+		m_screenH = h;
+		m_pxDensity = pxDensity;
+
 		return this;
 	}
 	
@@ -256,11 +253,6 @@ public class SessionBuilder {
 		return mAudioEncoder;
 	}
 
-	/** Returns the id of the {@link android.hardware.Camera} set with {@link #setCamera(int)}. */
-	public int getCamera() {
-		return mCamera;
-	}
-
 	/** Returns the video encoder set with {@link #setVideoEncoder(int)}. */
 	public int getVideoEncoder() {
 		return mVideoEncoder;
@@ -276,16 +268,6 @@ public class SessionBuilder {
 		return mAudioQuality;
 	}
 
-	/** Returns the flash state set with {@link #setFlashEnabled(boolean)}. */
-	public boolean getFlashState() {
-		return mFlash;
-	}
-
-	/** Returns the SurfaceView set with {@link #setSurfaceView(SurfaceView)}. */
-	public SurfaceView getSurfaceView() {
-		return mSurfaceView;
-	}
-	
 	
 	/** Returns the time to live set with {@link #setTimeToLive(int)}. */
 	public int getTimeToLive() {
@@ -297,17 +279,16 @@ public class SessionBuilder {
 		return new SessionBuilder()
 		.setDestination(mDestination)
 		.setOrigin(mOrigin)
-		.setSurfaceView(mSurfaceView)
 		.setPreviewOrientation(mOrientation)
 		.setVideoQuality(mVideoQuality)
 		.setVideoEncoder(mVideoEncoder)
-		.setFlashEnabled(mFlash)
-		.setCamera(mCamera)
 		.setTimeToLive(mTimeToLive)
 		.setAudioEncoder(mAudioEncoder)
 		.setAudioQuality(mAudioQuality)
 		.setContext(mContext)
-		.setCallback(mCallback);
+		.setCallback(mCallback)
+		.setMediaProjection(mMediaProjection)
+		.setScreenConfiguration(m_screenW, m_screenH, m_pxDensity);
 	}
 
 }

@@ -44,7 +44,7 @@ import android.util.Log;
 /**
  * A class for streaming H.264 from the camera of an android device using RTP.
  * You should use a {@link Session} instantiated with {@link SessionBuilder} instead of using this class directly.
- * Call {@link #setDestinationAddress(InetAddress)}, {@link #setDestinationPorts(int)} and {@link #setVideoQuality(VideoQuality)}
+ * Call {@link /#setDestinationAddress(InetAddress)}, {@link #setDestinationPorts(int)} and {@link #setVideoQuality(VideoQuality)}
  * to configure the stream. You can then call {@link #start()} to start the RTP stream.
  * Call {@link #stop()} to stop the stream.
  */
@@ -57,21 +57,11 @@ public class H264Stream extends VideoStream {
 
 	/**
 	 * Constructs the H.264 stream.
-	 * Uses CAMERA_FACING_BACK by default.
-	 */
-	public H264Stream() {
-		this(CameraInfo.CAMERA_FACING_BACK);
-	}
-
-	/**
-	 * Constructs the H.264 stream.
-	 * @param cameraId Can be either CameraInfo.CAMERA_FACING_BACK or CameraInfo.CAMERA_FACING_FRONT
 	 * @throws IOException
 	 */
-	public H264Stream(int cameraId) {
-		super(cameraId);
+	public H264Stream() {
+		super();
 		mMimeType = "video/avc";
-		mCameraImageFormat = ImageFormat.NV21;
 		mVideoEncoder = MediaRecorder.VideoEncoder.H264;
 		mPacketizer = new H264Packetizer();
 	}
@@ -88,7 +78,6 @@ public class H264Stream extends VideoStream {
 
 	/**
 	 * Starts the stream.
-	 * This will also open the camera and display the preview if {@link #startPreview()} has not already been called.
 	 */
 	public synchronized void start() throws IllegalStateException, IOException {
 		if (!mStreaming) {
@@ -116,26 +105,18 @@ public class H264Stream extends VideoStream {
 	 * and determines the pps and sps. Should not be called by the UI thread.
 	 **/
 	private MP4Config testH264() throws IllegalStateException, IOException {
-		if (mMode != MODE_MEDIARECORDER_API) return testMediaCodecAPI();
-		else return testMediaRecorderAPI();
+		return testMediaCodecAPI();
 	}
 
 	@SuppressLint("NewApi")
 	private MP4Config testMediaCodecAPI() throws RuntimeException, IOException {
-		createCamera();
-		updateCamera();
 		try {
-			if (mQuality.resX>=640) {
-				// Using the MediaCodec API with the buffer method for high resolutions is too slow
-				mMode = MODE_MEDIARECORDER_API;
-			}
 			EncoderDebugger debugger = EncoderDebugger.debug(mSettings, mQuality.resX, mQuality.resY);
 			return new MP4Config(debugger.getB64SPS(), debugger.getB64PPS());
 		} catch (Exception e) {
 			// Fallback on the old streaming method using the MediaRecorder API
 			Log.e(TAG,"Resolution not supported with the MediaCodec API, we fallback on the old streamign method.");
-			mMode = MODE_MEDIARECORDER_API;
-			return testH264();
+			return null;
 		}
 	}
 
@@ -164,24 +145,6 @@ public class H264Stream extends VideoStream {
 		} catch (IOException e) {
 			throw new StorageUnavailableException(e.getMessage());
 		}
-		
-		// Save flash state & set it to false so that led remains off while testing h264
-		boolean savedFlashState = mFlashEnabled;
-		mFlashEnabled = false;
-
-		boolean previewStarted = mPreviewStarted;
-		
-		boolean cameraOpen = mCamera!=null;
-		createCamera();
-
-		// Stops the preview if needed
-		if (mPreviewStarted) {
-			lockCamera();
-			try {
-				mCamera.stopPreview();
-			} catch (Exception e) {}
-			mPreviewStarted = false;
-		}
 
 		try {
 			Thread.sleep(100);
@@ -190,22 +153,18 @@ public class H264Stream extends VideoStream {
 			e1.printStackTrace();
 		}
 
-		unlockCamera();
-
 		try {
 			
 			mMediaRecorder = new MediaRecorder();
-			mMediaRecorder.setCamera(mCamera);
 			mMediaRecorder.setVideoSource(MediaRecorder.VideoSource.CAMERA);
 			mMediaRecorder.setOutputFormat(MediaRecorder.OutputFormat.THREE_GPP);
 			mMediaRecorder.setVideoEncoder(mVideoEncoder);
-			mMediaRecorder.setPreviewDisplay(mSurfaceView.getHolder().getSurface());
 			mMediaRecorder.setVideoSize(mRequestedQuality.resX,mRequestedQuality.resY);
 			mMediaRecorder.setVideoFrameRate(mRequestedQuality.framerate);
 			mMediaRecorder.setVideoEncodingBitRate((int)(mRequestedQuality.bitrate*0.8));
 			mMediaRecorder.setOutputFile(TESTFILE);
 			mMediaRecorder.setMaxDuration(3000);
-			
+
 			// We wait a little and stop recording
 			mMediaRecorder.setOnInfoListener(new MediaRecorder.OnInfoListener() {
 				public void onInfo(MediaRecorder mr, int what, int extra) {
@@ -245,16 +204,6 @@ public class H264Stream extends VideoStream {
 			} catch (Exception e) {}
 			mMediaRecorder.release();
 			mMediaRecorder = null;
-			lockCamera();
-			if (!cameraOpen) destroyCamera();
-			// Restore flash state
-			mFlashEnabled = savedFlashState;
-			if (previewStarted) {
-				// If the preview was started before the test, we try to restart it.
-				try {
-					startPreview();
-				} catch (Exception e) {}
-			}
 		}
 
 		// Retrieve SPS & PPS & ProfileId with MP4Config
